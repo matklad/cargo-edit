@@ -1,4 +1,4 @@
-use toml_edit;
+use tom;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum DependencySource {
@@ -73,31 +73,30 @@ impl Dependency {
     /// Returns a tuple with the dependency's name and either the version as a `String`
     /// or the path/git repository as an `InlineTable`.
     /// (If the dependency is set as `optional`, an `InlineTable` is returned in any case.)
-    pub fn to_toml(&self) -> (String, toml_edit::Item) {
-        let data: toml_edit::Item = match (self.optional, self.source.clone()) {
+    pub fn to_toml(&self) -> (String, String) {
+        let data: String = match (self.optional, self.source.clone()) {
             // Extra short when version flag only
-            (false, DependencySource::Version(v)) => toml_edit::value(v),
+            (false, DependencySource::Version(v)) => format!("{:?}", v),
             // Other cases are represented as an inline table
             (optional, source) => {
-                let mut data = toml_edit::InlineTable::default();
+                let mut data = String::from("{ ");
 
                 match source {
                     DependencySource::Version(v) => {
-                        data.get_or_insert("version", v);
+                        data.push_str(&format!(" version = {:?}", v));
                     }
                     DependencySource::Git(v) => {
-                        data.get_or_insert("git", v);
+                        data.push_str(&format!(" git = {:?}", v));
                     }
                     DependencySource::Path(v) => {
-                        data.get_or_insert("path", v);
+                        data.push_str(&format!(" path = {:?}", v));
                     }
                 }
                 if self.optional {
-                    data.get_or_insert("optional", optional);
+                    data.push_str(", optional = true");
                 }
-
-                data.fmt();
-                toml_edit::value(toml_edit::Value::InlineTable(data))
+                data.push_str(" }");
+                data
             }
         };
 

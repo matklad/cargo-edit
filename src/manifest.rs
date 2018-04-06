@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use std::{env, str};
 
 use termcolor::{BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
-use toml_edit;
+use tom;
+use tom::TomlFile;
 
 use errors::*;
 use dependency::Dependency;
@@ -16,7 +17,7 @@ const MANIFEST_FILENAME: &str = "Cargo.toml";
 #[derive(Debug, Clone)]
 pub struct Manifest {
     /// Manifest contents as TOML data
-    pub data: toml_edit::Document,
+    pub data: TomlFile,
 }
 
 /// If a manifest is specified, return that one, otherise perform a manifest search starting from
@@ -51,87 +52,88 @@ fn search(dir: &Path) -> Result<PathBuf> {
     }
 }
 
-fn merge_inline_table(old_dep: &mut toml_edit::Item, new: &toml_edit::Item) {
-    for (k, v) in new.as_inline_table()
-        .expect("expected an inline table")
-        .iter()
-    {
-        old_dep[k] = toml_edit::value(v.clone());
-    }
-}
+//fn merge_inline_table(old_dep: &mut toml_edit::Item, new: &toml_edit::Item) {
+//    for (k, v) in new.as_inline_table()
+//        .expect("expected an inline table")
+//        .iter()
+//    {
+//        old_dep[k] = toml_edit::value(v.clone());
+//    }
+//}
 
-fn str_or_1_len_table(item: &toml_edit::Item) -> bool {
-    item.is_str() || item.as_table_like().map(|t| t.len() == 1).unwrap_or(false)
-}
-/// Merge a new dependency into an old entry. See `Dependency::to_toml` for what the format of the
-/// new dependency will be.
-fn merge_dependencies(old_dep: &mut toml_edit::Item, new: &Dependency) {
-    assert!(!old_dep.is_none());
+//fn str_or_1_len_table(item: &toml_edit::Item) -> bool {
+//    item.is_str() || item.as_table_like().map(|t| t.len() == 1).unwrap_or(false)
+//}
 
-    let new_toml = new.to_toml().1;
+///// Merge a new dependency into an old entry. See `Dependency::to_toml` for what the format of the
+///// new dependency will be.
+//fn merge_dependencies(old_dep: &mut toml_edit::Item, new: &Dependency) {
+//    assert!(!old_dep.is_none());
+//
+//    let new_toml = new.to_toml().1;
+//
+//    if str_or_1_len_table(old_dep) {
+//        // The old dependency is just a version/git/path. We are safe to overwrite.
+//        *old_dep = new_toml;
+//    } else if old_dep.is_table_like() {
+//        for key in &["version", "path", "git"] {
+//            // remove this key/value pairs
+//            old_dep[key] = toml_edit::Item::None;
+//        }
+//        if let Some(name) = new_toml.as_str() {
+//            old_dep["version"] = toml_edit::value(name);
+//        } else {
+//            merge_inline_table(old_dep, &new_toml);
+//        }
+//    } else {
+//        unreachable!("Invalid old dependency type");
+//    }
+//
+//    old_dep.as_inline_table_mut().map(|t| t.fmt());
+//}
 
-    if str_or_1_len_table(old_dep) {
-        // The old dependency is just a version/git/path. We are safe to overwrite.
-        *old_dep = new_toml;
-    } else if old_dep.is_table_like() {
-        for key in &["version", "path", "git"] {
-            // remove this key/value pairs
-            old_dep[key] = toml_edit::Item::None;
-        }
-        if let Some(name) = new_toml.as_str() {
-            old_dep["version"] = toml_edit::value(name);
-        } else {
-            merge_inline_table(old_dep, &new_toml);
-        }
-    } else {
-        unreachable!("Invalid old dependency type");
-    }
-
-    old_dep.as_inline_table_mut().map(|t| t.fmt());
-}
-
-/// Print a message if the new dependency version is different from the old one.
-fn print_upgrade_if_necessary(
-    crate_name: &str,
-    old_dep: &toml_edit::Item,
-    new_version: &toml_edit::Item,
-) -> Result<()> {
-    let old_version = if str_or_1_len_table(old_dep) {
-        old_dep.clone()
-    } else if old_dep.is_table_like() {
-        let version = old_dep["version"].clone();
-        if version.is_none() {
-            return Err("Missing version field".into());
-        }
-        version
-    } else {
-        unreachable!("Invalid old dependency type")
-    };
-
-    if let (Some(old_version), Some(new_version)) = (old_version.as_str(), new_version.as_str()) {
-        if old_version == new_version {
-            return Ok(());
-        }
-        let bufwtr = BufferWriter::stdout(ColorChoice::Always);
-        let mut buffer = bufwtr.buffer();
-        buffer
-            .set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))
-            .chain_err(|| "Failed to set output colour")?;
-        write!(&mut buffer, "    Upgrading ").chain_err(|| "Failed to write upgrade message")?;
-        buffer
-            .set_color(&ColorSpec::new())
-            .chain_err(|| "Failed to clear output colour")?;
-        write!(
-            &mut buffer,
-            "{} v{} -> v{}\n",
-            crate_name, old_version, new_version,
-        ).chain_err(|| "Failed to write upgrade versions")?;
-        bufwtr
-            .print(&buffer)
-            .chain_err(|| "Failed to print upgrade message")?;
-    }
-    Ok(())
-}
+///// Print a message if the new dependency version is different from the old one.
+//fn print_upgrade_if_necessary(
+//    crate_name: &str,
+//    old_dep: &toml_edit::Item,
+//    new_version: &toml_edit::Item,
+//) -> Result<()> {
+//    let old_version = if str_or_1_len_table(old_dep) {
+//        old_dep.clone()
+//    } else if old_dep.is_table_like() {
+//        let version = old_dep["version"].clone();
+//        if version.is_none() {
+//            return Err("Missing version field".into());
+//        }
+//        version
+//    } else {
+//        unreachable!("Invalid old dependency type")
+//    };
+//
+//    if let (Some(old_version), Some(new_version)) = (old_version.as_str(), new_version.as_str()) {
+//        if old_version == new_version {
+//            return Ok(());
+//        }
+//        let bufwtr = BufferWriter::stdout(ColorChoice::Always);
+//        let mut buffer = bufwtr.buffer();
+//        buffer
+//            .set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))
+//            .chain_err(|| "Failed to set output colour")?;
+//        write!(&mut buffer, "    Upgrading ").chain_err(|| "Failed to write upgrade message")?;
+//        buffer
+//            .set_color(&ColorSpec::new())
+//            .chain_err(|| "Failed to clear output colour")?;
+//        write!(
+//            &mut buffer,
+//            "{} v{} -> v{}\n",
+//            crate_name, old_version, new_version,
+//        ).chain_err(|| "Failed to write upgrade versions")?;
+//        bufwtr
+//            .print(&buffer)
+//            .chain_err(|| "Failed to print upgrade message")?;
+//    }
+//    Ok(())
+//}
 
 impl Manifest {
     /// Look for a `Cargo.toml` file
@@ -159,102 +161,104 @@ impl Manifest {
     }
 
     /// Get the specified table from the manifest.
-    pub fn get_table<'a>(&'a mut self, table_path: &[String]) -> Result<&'a mut toml_edit::Item> {
-        /// Descend into a manifest until the required table is found.
-        fn descend<'a>(
-            input: &'a mut toml_edit::Item,
-            path: &[String],
-        ) -> Result<&'a mut toml_edit::Item> {
-            if let Some(segment) = path.get(0) {
-                let value = input[&segment].or_insert(toml_edit::table());
-
-                if value.is_table_like() {
-                    descend(value, &path[1..])
-                } else {
-                    Err(ErrorKind::NonExistentTable(segment.clone()).into())
-                }
-            } else {
-                Ok(input)
-            }
-        }
-
-        descend(&mut self.data.root, table_path)
+    pub fn get_table<'a>(&'a mut self, table_path: &[String]) -> Result<tom::ast::Table> {
+//        /// Descend into a manifest until the required table is found.
+//        fn descend<'a>(
+//            input: &'a mut toml_edit::Item,
+//            path: &[String],
+//        ) -> Result<&'a mut toml_edit::Item> {
+//            if let Some(segment) = path.get(0) {
+//                let value = input[&segment].or_insert(toml_edit::table());
+//
+//                if value.is_table_like() {
+//                    descend(value, &path[1..])
+//                } else {
+//                    Err(ErrorKind::NonExistentTable(segment.clone()).into())
+//                }
+//            } else {
+//                Ok(input)
+//            }
+//        }
+//
+//        descend(&mut self.data.root, table_path)
+        unimplemented!()
     }
 
     /// Get all sections in the manifest that exist and might contain dependencies.
     /// The returned items are always `Table` or `InlineTable`.
-    pub fn get_sections(&self) -> Vec<(Vec<String>, toml_edit::Item)> {
+    pub fn get_sections(&self) -> Vec<(Vec<String>, tom::ast::Table)> {
         let mut sections = Vec::new();
 
-        for dependency_type in &["dev-dependencies", "build-dependencies", "dependencies"] {
-            // Dependencies can be in the three standard sections...
-            if self.data[dependency_type].is_table_like() {
-                sections.push((
-                    vec![dependency_type.to_string()],
-                    self.data[dependency_type].clone(),
-                ))
-            }
-
-            // ... and in `target.<target>.(build-/dev-)dependencies`.
-            let target_sections = self.data
-                .as_table()
-                .get("target")
-                .and_then(toml_edit::Item::as_table_like)
-                .into_iter()
-                .flat_map(|t| t.iter())
-                .filter_map(|(target_name, target_table)| {
-                    let dependency_table = &target_table[dependency_type];
-                    dependency_table.as_table_like().map(|_| {
-                        (
-                            vec![
-                                "target".to_string(),
-                                target_name.to_string(),
-                                dependency_type.to_string(),
-                            ],
-                            dependency_table.clone(),
-                        )
-                    })
-                });
-
-            sections.extend(target_sections);
-        }
+//        for dependency_type in &["dev-dependencies", "build-dependencies", "dependencies"] {
+//            // Dependencies can be in the three standard sections...
+//            if self.data[dependency_type].is_table_like() {
+//                sections.push((
+//                    vec![dependency_type.to_string()],
+//                    self.data[dependency_type].clone(),
+//                ))
+//            }
+//
+//            // ... and in `target.<target>.(build-/dev-)dependencies`.
+//            let target_sections = self.data
+//                .as_table()
+//                .get("target")
+//                .and_then(toml_edit::Item::as_table_like)
+//                .into_iter()
+//                .flat_map(|t| t.iter())
+//                .filter_map(|(target_name, target_table)| {
+//                    let dependency_table = &target_table[dependency_type];
+//                    dependency_table.as_table_like().map(|_| {
+//                        (
+//                            vec![
+//                                "target".to_string(),
+//                                target_name.to_string(),
+//                                dependency_type.to_string(),
+//                            ],
+//                            dependency_table.clone(),
+//                        )
+//                    })
+//                });
+//
+//            sections.extend(target_sections);
+//        }
 
         sections
     }
 
     /// Overwrite a file with TOML data.
     pub fn write_to_file(&self, file: &mut File) -> Result<()> {
-        if self.data["package"].is_none() && self.data["project"].is_none() {
-            if !self.data["workspace"].is_none() {
-                Err(ErrorKind::UnexpectedRootManifest)?;
-            } else {
-                Err(ErrorKind::InvalidManifest)?;
-            }
-        }
+//        if self.data["package"].is_none() && self.data["project"].is_none() {
+//            if !self.data["workspace"].is_none() {
+//                Err(ErrorKind::UnexpectedRootManifest)?;
+//            } else {
+//                Err(ErrorKind::InvalidManifest)?;
+//            }
+//        }
 
-        let s = self.data.to_string();
-        let new_contents_bytes = s.as_bytes();
-
-        // We need to truncate the file, otherwise the new contents
-        // will be mixed up with the old ones.
-        file.set_len(new_contents_bytes.len() as u64)
-            .chain_err(|| "Failed to truncate Cargo.toml")?;
-        file.write_all(new_contents_bytes)
-            .chain_err(|| "Failed to write updated Cargo.toml")
+//        let s = self.data.to_string();
+//        let new_contents_bytes = s.as_bytes();
+//
+//        // We need to truncate the file, otherwise the new contents
+//        // will be mixed up with the old ones.
+//        file.set_len(new_contents_bytes.len() as u64)
+//            .chain_err(|| "Failed to truncate Cargo.toml")?;
+//        file.write_all(new_contents_bytes)
+//            .chain_err(|| "Failed to write updated Cargo.toml")
+        Ok(())
     }
 
     /// Add entry to a Cargo.toml.
     pub fn insert_into_table(&mut self, table_path: &[String], dep: &Dependency) -> Result<()> {
-        let table = self.get_table(table_path)?;
-
-        if table[&dep.name].is_none() {
-            // insert a new entry
-            let (ref name, ref mut new_dependency) = dep.to_toml();
-            table[name] = new_dependency.clone();
-        } else {
-            // update an existing entry
-            merge_dependencies(&mut table[&dep.name], dep);
-            table.as_inline_table_mut().map(|t| t.fmt());
+//        let table = self.get_table(table_path)?;
+//
+//        if table[&dep.name].is_none() {
+//            // insert a new entry
+//            let (ref name, ref mut new_dependency) = dep.to_toml();
+//            table[name] = new_dependency.clone();
+//        } else {
+//            // update an existing entry
+//            merge_dependencies(&mut table[&dep.name], dep);
+//            table.as_inline_table_mut().map(|t| t.fmt());
         }
         Ok(())
     }
@@ -271,11 +275,11 @@ impl Manifest {
 
         // If (and only if) there is an old entry, merge the new one in.
         if !table[&dep.name].is_none() {
-            if let Err(e) = print_upgrade_if_necessary(&dep.name, &table[&dep.name], &new_dep) {
-                eprintln!("Error while displaying upgrade message, {}", e);
-            }
+//            if let Err(e) = print_upgrade_if_necessary(&dep.name, &table[&dep.name], &new_dep) {
+//                eprintln!("Error while displaying upgrade message, {}", e);
+//            }
             if !dry_run {
-                merge_dependencies(&mut table[&dep.name], dep);
+//                merge_dependencies(&mut table[&dep.name], dep);
                 table.as_inline_table_mut().map(|t| t.fmt());
             }
         }
@@ -303,23 +307,23 @@ impl Manifest {
     /// # }
     /// ```
     pub fn remove_from_table(&mut self, table: &str, name: &str) -> Result<()> {
-        if !self.data[table].is_table_like() {
-            Err(ErrorKind::NonExistentTable(table.into()))?;
-        } else {
-            {
-                let dep = &mut self.data[table][name];
-                if dep.is_none() {
-                    Err(ErrorKind::NonExistentDependency(name.into(), table.into()))?;
-                }
-                // remove the dependency
-                *dep = toml_edit::Item::None;
-            }
-
-            // remove table if empty
-            if self.data[table].as_table_like().unwrap().is_empty() {
-                self.data[table] = toml_edit::Item::None;
-            }
-        }
+//        if !self.data[table].is_table_like() {
+//            Err(ErrorKind::NonExistentTable(table.into()))?;
+//        } else {
+//            {
+//                let dep = &mut self.data[table][name];
+//                if dep.is_none() {
+//                    Err(ErrorKind::NonExistentDependency(name.into(), table.into()))?;
+//                }
+//                // remove the dependency
+//                *dep = toml_edit::Item::None;
+//            }
+//
+//            // remove table if empty
+//            if self.data[table].as_table_like().unwrap().is_empty() {
+//                self.data[table] = toml_edit::Item::None;
+//            }
+//        }
         Ok(())
     }
 
@@ -338,9 +342,10 @@ impl str::FromStr for Manifest {
 
     /// Read manifest data from string
     fn from_str(input: &str) -> ::std::result::Result<Self, Self::Err> {
-        let d: toml_edit::Document = input.parse().chain_err(|| "Manifest not valid TOML")?;
-
-        Ok(Manifest { data: d })
+//        let d: toml_edit::Document = input.parse().chain_err(|| "Manifest not valid TOML")?;
+//
+//        Ok(Manifest { data: d })
+        unimplemented!()
     }
 }
 
