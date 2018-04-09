@@ -11,13 +11,14 @@ extern crate semver;
 #[macro_use]
 extern crate serde_derive;
 extern crate termcolor;
+extern crate file;
 
 use std::process;
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 extern crate cargo_edit;
-use cargo_edit::{Dependency, Manifest};
+use cargo_edit::{Dependency, Manifest, find};
 
 mod args;
 use args::Args;
@@ -110,24 +111,18 @@ fn handle_add(args: &Args) -> Result<()> {
     let manifest_path = args.flag_manifest_path.as_ref().map(From::from);
     let mut manifest = Manifest::open(&manifest_path)?;
     let deps = &args.parse_dependencies()?;
+    if !args.flag_quiet {
+        for dep in deps.iter() {
+            print_msg(dep, &args.get_section(), args.flag_optional)?;
+        }
+    }
+    let edit = manifest.add_dependencies(
+        &args.get_section(),
+        &deps
+    );
 
-    deps.iter()
-        .map(|dep| {
-            if !args.flag_quiet {
-                print_msg(dep, &args.get_section(), args.flag_optional)?;
-            }
-            manifest
-                .insert_into_table(&args.get_section(), dep)
-                .map_err(Into::into)
-        })
-        .collect::<Result<Vec<_>>>()
-        .map_err(|err| {
-            eprintln!("Could not edit `Cargo.toml`.\n\nERROR: {}", err);
-            err
-        })?;
-
-    let mut file = Manifest::find_file(&manifest_path)?;
-    manifest.write_to_file(&mut file)?;
+    let path = find(&manifest_path)?;
+    file::put_text(path, edit.finish())?;
 
     Ok(())
 }

@@ -6,6 +6,8 @@ use std::{env, str};
 
 use termcolor::{BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 use toml_edit;
+use tom::{self, TomlFile};
+use tom::ast::{self, AstNode};
 
 use errors::*;
 use dependency::Dependency;
@@ -17,6 +19,7 @@ const MANIFEST_FILENAME: &str = "Cargo.toml";
 pub struct Manifest {
     /// Manifest contents as TOML data
     pub data: toml_edit::Document,
+    pub file: TomlFile,
 }
 
 /// If a manifest is specified, return that one, otherise perform a manifest search starting from
@@ -243,6 +246,31 @@ impl Manifest {
             .chain_err(|| "Failed to write updated Cargo.toml")
     }
 
+    pub fn add_dependencies(&self, table_path: &[String], deps: &[Dependency]) -> tom::Edit {
+        let mut edit = tom::Edit::new(&self.file);
+        let f = tom::Factory::new();
+        let mut deps = deps.iter().map(|dep| dep.to_tom(&f));
+        match self.file.ast().find_table(table_path) {
+            None => {
+                let table = f.table(
+                    &mut table_path.iter().map(|s| s.as_ref()),
+                    &mut deps
+                );
+                edit.append_child(
+                    self.file.parse_tree(),
+                    table.node()
+                );
+            },
+            Some(table) => {
+                edit.append_children(
+                    table.node(),
+                    &mut deps.map(|kv| kv.node()),
+                );
+            }
+        }
+        edit
+    }
+
     /// Add entry to a Cargo.toml.
     pub fn insert_into_table(&mut self, table_path: &[String], dep: &Dependency) -> Result<()> {
         let table = self.get_table(table_path)?;
@@ -339,8 +367,8 @@ impl str::FromStr for Manifest {
     /// Read manifest data from string
     fn from_str(input: &str) -> ::std::result::Result<Self, Self::Err> {
         let d: toml_edit::Document = input.parse().chain_err(|| "Manifest not valid TOML")?;
-
-        Ok(Manifest { data: d })
+        let file = TomlFile::new(input.to_string());
+        Ok(Manifest { data: d, file })
     }
 }
 
@@ -407,11 +435,13 @@ mod tests {
     use dependency::Dependency;
     use super::*;
     use toml_edit;
+    use tom::TomlFile;
 
     #[test]
     fn add_remove_dependency() {
         let mut manifest = Manifest {
             data: toml_edit::Document::new(),
+            file: TomlFile::new("foo = 92".into()),
         };
         let clone = manifest.clone();
         let dep = Dependency::new("cargo-edit").set_version("0.1.0");
@@ -428,6 +458,7 @@ mod tests {
     fn update_dependency() {
         let mut manifest = Manifest {
             data: toml_edit::Document::new(),
+            file: TomlFile::new("foo = 92".into()),
         };
         let dep = Dependency::new("cargo-edit").set_version("0.1.0");
         manifest
@@ -444,6 +475,7 @@ mod tests {
     fn update_wrong_dependency() {
         let mut manifest = Manifest {
             data: toml_edit::Document::new(),
+            file: TomlFile::new("foo = 92".into()),
         };
         let dep = Dependency::new("cargo-edit").set_version("0.1.0");
         manifest
@@ -463,6 +495,7 @@ mod tests {
     fn remove_dependency_no_section() {
         let mut manifest = Manifest {
             data: toml_edit::Document::new(),
+            file: TomlFile::new("foo = 92".into()),
         };
         let dep = Dependency::new("cargo-edit").set_version("0.1.0");
         assert!(
@@ -476,6 +509,7 @@ mod tests {
     fn remove_dependency_non_existent() {
         let mut manifest = Manifest {
             data: toml_edit::Document::new(),
+            file: TomlFile::new("foo = 92".into()),
         };
         let dep = Dependency::new("cargo-edit").set_version("0.1.0");
         let other_dep = Dependency::new("other-dep").set_version("0.1.0");

@@ -1,4 +1,6 @@
 use toml_edit;
+use tom;
+use tom::ast;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum DependencySource {
@@ -66,6 +68,27 @@ impl Dependency {
         } else {
             None
         }
+    }
+
+    pub fn to_tom<'f>(&self, f: &'f tom::Factory) -> ast::KeyVal<'f> {
+        let val = match (self.optional, &self.source) {
+            (false, &DependencySource::Version(ref v)) => f.val_string(&v),
+            (optional, source) => {
+                let (k, v) = match *source {
+                    DependencySource::Version(ref v) => ("version", v),
+                    DependencySource::Git(ref v) => ("git", v),
+                    DependencySource::Path(ref v) => ("path", v),
+                };
+                let mut attrs = vec![
+                    f.key_val(k, f.val_string(v))
+                ];
+                if self.optional {
+                    attrs.push(f.key_val("optional", f.val_bool(true)));
+                }
+                f.val_dict(&mut attrs.into_iter())
+            }
+        };
+        f.key_val(&self.name, val)
     }
 
     /// Convert dependency to TOML
