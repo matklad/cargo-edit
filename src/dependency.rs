@@ -70,10 +70,11 @@ impl Dependency {
         }
     }
 
+    /// TODO
     pub fn to_tom<'f>(&self, f: &'f tom::Factory) -> ast::KeyVal<'f> {
         let val = match (self.optional, &self.source) {
             (false, &DependencySource::Version(ref v)) => f.val_string(&v),
-            (optional, source) => {
+            (_, source) => {
                 let (k, v) = match *source {
                     DependencySource::Version(ref v) => ("version", v),
                     DependencySource::Git(ref v) => ("git", v),

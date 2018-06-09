@@ -676,7 +676,7 @@ fn overwrite_version_with_git() {
         &["add", "versioned-package", "--git", "git://git.git"],
         r#"
 [dependencies]
-versioned-package = { optional = true, git = "git://git.git" }
+versioned-package = { git = "git://git.git", optional = true }
 "#,
     )
 }
@@ -688,7 +688,7 @@ fn overwrite_version_with_path() {
         &["add", "versioned-package", "--path", "../foo"],
         r#"
 [dependencies]
-versioned-package = { optional = true, path = "../foo" }
+versioned-package = { path = "../foo", optional = true }
 "#,
     )
 }
@@ -706,7 +706,7 @@ fn overwrite_git_with_path() {
         &["add", "versioned-package", "--path", "../foo"],
         r#"
 [dependencies]
-versioned-package = { optional = true, path = "../foo" }
+versioned-package = { path = "../foo", optional = true }
 "#,
     )
 }
